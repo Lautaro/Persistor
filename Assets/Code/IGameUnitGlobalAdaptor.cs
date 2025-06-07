@@ -1,1 +1,0 @@
-﻿public interface IGameUnit_Global_Adaptor<T> : IGameUnitAdaptor<T> { }
