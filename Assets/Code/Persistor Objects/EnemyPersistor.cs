@@ -1,8 +1,9 @@
 ﻿using System;
 using UnityEngine;
 
+
 [Serializable]
-public class TransformAdaptor : IPersistor
+public class EnemyPersistor : IPersistor
 {
     public float[] position = new float[3];
     public float[] rotation = new float[3];

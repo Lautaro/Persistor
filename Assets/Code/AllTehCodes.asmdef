@@ -1,0 +1,17 @@
+{
+    "name": "AllTehCodes",
+    "rootNamespace": "",
+    "references": [
+        "GUID:7155bee6ece5ce3498a29c70fb16c468",
+        "GUID:5517b9ac07e86ff489e4332daf58c42a"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

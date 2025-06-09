@@ -11,7 +11,6 @@ public class Vector3Adaptor : IPersistor_Global_Field<Vector3>
         x = v3.x;
         y = v3.y;
         z = v3.z;
-
     }
     public void CopyFromData(Vector3 v3)
     {

@@ -74,12 +74,6 @@ public static class Persistor
         where TUnit : MonoBehaviour
     {
         var dataType = FindDataType<TUnit>();
-        var persistorType = FindPersistorType<TUnit>();
-
-        var copyToData = persistorType.GetMethod("CopyToData", BindingFlags.Public | BindingFlags.Static);
-        if (copyToData == null)
-            throw new InvalidOperationException($"CopyToData not found on {persistorType.Name}");
-
         var dataList = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(dataType));
         foreach (var unit in units)
         {
@@ -94,7 +88,12 @@ public static class Persistor
                 }
             }
 
-            copyToData.Invoke(null, new object[] { unit, data });
+            // Use instance method: data.CopyToData(unit)
+            var copyToData = dataType.GetMethod("CopyToData", BindingFlags.Public | BindingFlags.Instance);
+            if (copyToData == null)
+                throw new InvalidOperationException($"CopyToData not found on {dataType.Name}");
+            copyToData.Invoke(data, new object[] { unit });
+
             dataList.Add(data);
         }
 
@@ -118,8 +117,6 @@ public static class Persistor
         return LoadDataList<TUnit>(fileName);
     }
 
-
-
     /// <summary>
     /// Loads all persisted data for the given unit type, instantiates new GameObjects,
     /// adds the TUnit component, and populates them using the persistor.
@@ -130,10 +127,11 @@ public static class Persistor
     where TUnit : MonoBehaviour
     {
         var dataList = LoadDataList<TUnit>(fileName);
-        var persistorType = FindPersistorType<TUnit>();
-        var copyFromData = persistorType.GetMethod("CopyFromData", BindingFlags.Public | BindingFlags.Static);
+        var dataType = FindDataType<TUnit>();
+        var copyFromData = dataType.GetMethod("CopyFromData", BindingFlags.Public | BindingFlags.Instance);
         if (copyFromData == null)
-            throw new InvalidOperationException($"CopyFromData not found on {persistorType.Name}");
+            throw new InvalidOperationException($"CopyFromData not found on {dataType.Name}");
+
 
         // Check for PersistorPrefabAttribute
         GameObject prefab = null;
@@ -167,7 +165,16 @@ public static class Persistor
                     "You must provide a factory method, a prefab parameter, or use a [PersistorPrefab] attribute.");
             }
 
-            copyFromData.Invoke(null, new object[] { unit, data });
+            // Instantiate all IPersistor fields if they are null
+            foreach (var field in data.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            {
+                if (typeof(IPersistor).IsAssignableFrom(field.FieldType) && field.GetValue(data) == null)
+                {
+                    field.SetValue(data, Activator.CreateInstance(field.FieldType));
+                }
+            }
+
+            copyFromData.Invoke(data, new object[] { unit });
             result.Add(unit);
         }
         return result;
@@ -191,7 +198,7 @@ public static class Persistor
             var go = UnityEngine.Object.Instantiate(prefab);
             var unit = go.GetComponent<TUnit>();
             if (unit == null)
-                throw new InvalidOperationException($"Prefab root does not have a component of type {typeof(TUnit).Name}");
+                throw new InvalidOperationException($"Prefab root does not, but must have, a component of type {typeof(TUnit).Name}");
             return unit;
         });
     }
@@ -220,15 +227,101 @@ public static class Persistor
                  .Cast<DataForAttribute>()
                  .Any(attr => attr.TargetType == typeof(TUnit)));
     }
-
-    private static Type FindPersistorType<TUnit>()
+    public static TUnit Create<TUnit>(
+        GameObject prefab = null,
+        ScriptableObject preset = null,
+        string rootName = null)
+        where TUnit : MonoBehaviour
     {
-        return AppDomain.CurrentDomain.GetAssemblies()
-            .SelectMany(a => a.GetTypes())
-            .FirstOrDefault(t =>
-                t.GetCustomAttributes(typeof(PersistorForAttribute), false)
-                 .Cast<PersistorForAttribute>()
-                 .Any(attr => attr.TargetType == typeof(TUnit)));
+        // 1. Determine prefab to use
+        if (prefab == null)
+        {
+            var attr = typeof(TUnit).GetCustomAttribute<PersistorPrefabAttribute>();
+            if (attr != null)
+            {
+                prefab = PersistorPrefabLoader.LoadPrefab(attr.Reference);
+                if (prefab == null)
+                    throw new InvalidOperationException($"Prefab '{attr.Reference}' could not be loaded for {typeof(TUnit).Name}");
+            }
+        }
+
+        // 2. Instantiate GameObject and add TUnit
+        TUnit unit;
+        GameObject go;
+        if (prefab != null)
+        {
+            go = UnityEngine.Object.Instantiate(prefab);
+            if (!string.IsNullOrEmpty(rootName))
+                go.name = rootName;
+            unit = go.GetComponent<TUnit>();
+            if (unit == null)
+                unit = go.AddComponent<TUnit>();
+        }
+        else
+        {
+            go = new GameObject(string.IsNullOrEmpty(rootName) ? typeof(TUnit).Name : rootName);
+            unit = go.AddComponent<TUnit>();
+        }
+
+        // 3. Apply preset if provided
+        if (preset != null)
+        {
+            // Try to find and call CopyFromPreset
+            var copyFromPreset = preset.GetType().GetMethod("CopyFromPreset", BindingFlags.Public | BindingFlags.Instance);
+            if (copyFromPreset != null)
+            {
+                copyFromPreset.Invoke(preset, new object[] { unit });
+            }
+            else
+            {
+                Debug.LogWarning($"Preset of type {preset.GetType().Name} does not have a CopyFromPreset method.");
+            }
+        }
+
+        return unit;
+    }
+    public static Component CreateFromPrefab(GameObject prefab, ScriptableObject preset = null, string rootName = null)
+    {
+        if (prefab == null)
+            throw new ArgumentNullException(nameof(prefab));
+
+        var go = UnityEngine.Object.Instantiate(prefab);
+        if (!string.IsNullOrEmpty(rootName))
+            go.name = rootName;
+
+        // Find the first component in the hierarchy with a [PersistorId] field
+        var allComponents = go.GetComponentsInChildren<Component>(true);
+        Component persistorObject = null;
+        foreach (var comp in allComponents)
+        {
+            if (comp == null) continue;
+            var fields = comp.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (fields.Any(f => f.IsDefined(typeof(PersistorIdAttribute), false)))
+            {
+                if (persistorObject != null)
+                    throw new InvalidOperationException("Multiple components with [PersistorId] found in prefab hierarchy. Only one is allowed.");
+                persistorObject = comp;
+            }
+        }
+
+        if (persistorObject == null)
+            throw new InvalidOperationException("No component with [PersistorId] found in prefab hierarchy.");
+
+        // Optionally apply preset if provided
+        if (preset != null)
+        {
+            var copyFromPreset = preset.GetType().GetMethod("CopyFromPreset", BindingFlags.Public | BindingFlags.Instance);
+            if (copyFromPreset != null)
+            {
+                copyFromPreset.Invoke(preset, new object[] { persistorObject });
+            }
+            else
+            {
+                Debug.LogWarning($"Preset of type {preset.GetType().Name} does not have a CopyFromPreset method.");
+            }
+        }
+
+        return persistorObject;
     }
 
     [System.Serializable]

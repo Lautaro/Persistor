@@ -1,48 +1,37 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Sirenix.OdinInspector;
-using Unity.VisualScripting;
 
 public class EnemyTester : MonoBehaviour
 {
-    public EnemyPreset preset;
+    public Enemy_Preset preset;
 
     public GameObject enemyPrefab;
 
-    public int spawnCount = 3;
+    public int createNewCount = 3;
     private List<Enemy> spawnedUnits = new List<Enemy>();
 
     [Button]
-    public void SpawnUnits()
+    public void CreateNew()
     {
         ClearUnits();
-        for (int i = 0; i < spawnCount; i++)
+        for (int i = 0; i < createNewCount; i++)
         {
-            Enemy unit = Spawn("enemy_" + i);
-            spawnedUnits.Add(unit);
+            var enemy = Persistor.Create<Enemy>(enemyPrefab, preset, "enemy_" + i);
+            enemy.transform.position = Random.insideUnitSphere * 5f;
+            spawnedUnits.Add(enemy);
         }
         Debug.Log($"Spawned {spawnedUnits.Count} EnemyUnits.");
     }
 
     private Enemy Spawn(string name = "")
     {
-        var go = enemyPrefab != null
-            ? Instantiate(enemyPrefab)
-            : new GameObject($"Enemy_{name}");
+        var go = new GameObject($"Enemy_{name}");
 
         go.transform.position = Random.insideUnitSphere * 5f;
         var unit = go.GetComponent<Enemy>() ?? go.AddComponent<Enemy>();
 
-        if (preset != null)
-        {
-            EnemyPersistor.CopyFromPreset(unit, preset);
-        }
-        else
-        {
-            unit.unitName = $"Enemy_{name}";
-            unit.health = Random.Range(50, 150);
-            unit.speed = Random.Range(2f, 8f);
-        }
+        unit.unitName = name;
         AddSphere(go);
         return unit;
     }
@@ -85,7 +74,6 @@ public class EnemyTester : MonoBehaviour
         ClearUnits();
         spawnedUnits = Persistor.LoadAll<Enemy>("EnemyUnits.json");
 
-        // Optionally, add spheres to loaded units
         foreach (var unit in spawnedUnits)
         {
             AddSphere(unit.gameObject);

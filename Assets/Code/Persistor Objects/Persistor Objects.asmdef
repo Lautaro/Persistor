@@ -1,0 +1,16 @@
+{
+    "name": "PersistorObjects",
+    "rootNamespace": "",
+    "references": [
+        "GUID:7155bee6ece5ce3498a29c70fb16c468"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
