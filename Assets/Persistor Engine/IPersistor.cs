@@ -1,11 +1,9 @@
-﻿using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using UnityEngine;
-
-public interface IPersistor
+﻿using UnityEngine;
+namespace PersistorEngine.Internal
 {
-    void CopyToData(MonoBehaviour adaptorTarget);
-    void CopyFromData(MonoBehaviour adaptorTarget);
+    public interface IPersistor<T>
+    {
+        void CopyToData(T persistorTarget);
+        void CopyFromData(T persistorTarget);
+    }
 }
