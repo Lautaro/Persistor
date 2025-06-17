@@ -6,7 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
-namespace PersistorEngine.Internal
+namespace PersistorEngine
 {
     /// <summary>
     /// The Persistor class handles the creation, saving, and loading of persistent game objects.
