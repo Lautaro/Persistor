@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e75e72df49775f04884e8d202321dc78, type: 3}
   m_Name: PersistorSettings
   m_EditorClassIdentifier: 
-  defaultGeneratedCodeFolder: Code/Persistors Objects/_generated
+  defaultGeneratedCodeFolder: Code/Persistor Objects/_generated
   useTypeSubfolders: 0
   typeSubfolderSuffix: ' Generated Code'
   defaultPrefabFolder: Persistor Prefabs

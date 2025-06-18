@@ -27,7 +27,7 @@ public class PersistorDashboard : EditorWindow
 
     private void OpenSaveFolder()
     {
-        string saveFolder = Application.dataPath + "/../Saves";
+        string saveFolder = Application.persistentDataPath;
         if (!System.IO.Directory.Exists(saveFolder))
         {
             EditorUtility.DisplayDialog("Folder Not Found", $"Save folder not found:\n{saveFolder}", "OK");
