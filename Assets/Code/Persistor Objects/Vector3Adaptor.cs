@@ -3,7 +3,7 @@ using System;
 using UnityEngine;
 
 [Serializable]
-public class Vector3Persistor : IPersistorField<Vector3>
+public class Vector3Persistor : IAdaptorField<Vector3>
 {
     public float x, y, z;
 

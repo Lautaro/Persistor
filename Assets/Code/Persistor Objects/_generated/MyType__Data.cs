@@ -12,7 +12,7 @@ public partial class MyType__Data
 {
     public string persistorId;
     public int someValue;
-    public MyTypePersistor myTypePersistor = new();
+    public MyTypeAdaptor myTypePersistor = new();
 
     public void CopyToData(MyType unit)
     {

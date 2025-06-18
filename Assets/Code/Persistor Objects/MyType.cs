@@ -1,7 +1,7 @@
 ﻿using PersistorEngine.Internal;
 using System;
 
-[Persistor(typeof(MyTypePersistor)), Serializable]
+[Adaptor(typeof(MyTypeAdaptor)), Serializable]
 public class MyType : PersistorObject
 {
     [Persist] public int someValue;

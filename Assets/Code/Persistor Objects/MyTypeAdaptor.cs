@@ -2,7 +2,7 @@
 using System;
 
 [Serializable]
-public class MyTypePersistor : IPersistor<MyType>
+public class MyTypeAdaptor : IAdaptor<MyType>
 {
     public int someValue;
 

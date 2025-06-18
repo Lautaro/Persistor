@@ -2,7 +2,7 @@ using PersistorEngine.Internal;
 using Sirenix.OdinInspector;
 using UnityEngine;
 
-[Persistor(typeof(EnemyPersistor)),PersistorPrefab("CoolSphere Enemy")]
+[Adaptor(typeof(EnemyAdaptor)),PersistorPrefab("CoolSphere Enemy")]
 public class Enemy : PersistorMonoBehaviour
 {
     [Persist] public string unitName = "";
@@ -11,5 +11,4 @@ public class Enemy : PersistorMonoBehaviour
     [Persist] public Vector3 myVectorThree;
     [Persist, HideLabel] public MyType myType = new ();
     [Persist, HideLabel] public MySharedData mySharedData= new ();
-    
 }

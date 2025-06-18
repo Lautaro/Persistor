@@ -4,7 +4,7 @@ using UnityEngine;
 
 
 [Serializable]
-public class EnemyPersistor : IPersistor<Enemy>
+public class EnemyAdaptor : IAdaptor<Enemy>
 {
     public float[] position = new float[3];
     public float[] rotation = new float[3];

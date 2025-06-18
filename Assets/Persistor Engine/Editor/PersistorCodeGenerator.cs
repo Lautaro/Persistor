@@ -57,10 +57,10 @@ public static class PersistorCodeGenerator
     {
         var persistorTypes = new HashSet<Type>();
 
-        var classAttr = unitType.GetCustomAttribute<PersistorAttribute>(inherit: true);
-        if (classAttr != null && classAttr.PersistorTypes != null)
+        var classAttr = unitType.GetCustomAttribute<AdaptorAttribute>(inherit: true);
+        if (classAttr != null && classAttr.AdaptorTypes != null)
         {
-            foreach (var t in classAttr.PersistorTypes)
+            foreach (var t in classAttr.AdaptorTypes)
                 persistorTypes.Add(t);
         }
 
@@ -384,8 +384,8 @@ public partial class {unitName}{dataSuffix}
                 var iface = type.GetInterfaces()
                     .FirstOrDefault(i =>
                         i.IsGenericType &&
-                        (i.GetGenericTypeDefinition() == typeof(IPersistorField<>) ||
-                         i.GetGenericTypeDefinition() == typeof(IPersistor<>)));
+                        (i.GetGenericTypeDefinition() == typeof(IAdaptorField<>) ||
+                         i.GetGenericTypeDefinition() == typeof(IAdaptor<>)));
                 if (iface != null)
                 {
                     var targetType = iface.GetGenericArguments()[0];
@@ -419,9 +419,9 @@ public partial class {unitName}{dataSuffix}
             return (globalType, $"{ToCamelCase(field.Name)}Persistor");
 
         // Check for [Persistor] attribute on the field's type
-        var persistorAttr = field.FieldType.GetCustomAttribute<PersistorAttribute>();
-        if (persistorAttr != null && persistorAttr.PersistorTypes != null && persistorAttr.PersistorTypes.Length > 0)
-            return (persistorAttr.PersistorTypes[0], $"{ToCamelCase(field.Name)}Persistor");
+        var persistorAttr = field.FieldType.GetCustomAttribute<AdaptorAttribute>();
+        if (persistorAttr != null && persistorAttr.AdaptorTypes != null && persistorAttr.AdaptorTypes.Length > 0)
+            return (persistorAttr.AdaptorTypes[0], $"{ToCamelCase(field.Name)}Persistor");
 
         return (null, null);
     }

@@ -16,9 +16,9 @@ public partial class Enemy__Data
     public int health;
     public float speed;
     public Vector3Persistor myVectorThreePersistor = new();
-    public MyTypePersistor myTypePersistor = new();
+    public MyTypeAdaptor myTypePersistor = new();
     public string mySharedDataId;
-    public EnemyPersistor enemyPersistor = new();
+    public EnemyAdaptor enemyPersistor = new();
 
     public void CopyToData(Enemy unit)
     {
