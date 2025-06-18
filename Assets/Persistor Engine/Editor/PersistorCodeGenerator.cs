@@ -9,13 +9,13 @@ using UnityEngine;
 
 public static class PersistorCodeGenerator
 {
-    private static Dictionary<Type, Type> _globalPersistorMap;
+    private static Dictionary<Type, Type> _globalAdaptorMap;
 
-    [MenuItem("Tools/Regenerate Persistors")]
+    [MenuItem("Tools/Regenerate Adaptors")]
     public static void Generate()
     {
         Debug.Log("WEEEEE");
-        _globalPersistorMap = DiscoverGlobalPersistors();
+        _globalAdaptorMap = DiscoverGlobalAdaptors();
 
         var assemblies = AppDomain.CurrentDomain.GetAssemblies();
         foreach (var assembly in assemblies)
@@ -31,12 +31,12 @@ public static class PersistorCodeGenerator
                     && !type.IsAbstract
                     && !type.IsDefined(typeof(PersistorIgnoreAttribute), false))
                 {
-                    GenerateForPersistors(type);
+                    GenerateForAdaptors(type);
                 }
             }
         }
         AssetDatabase.Refresh();
-        Debug.Log("Persistor code generation complete.");
+        Debug.Log("Adaptor code generation complete.");
     }
 
     // Gets all fields with [Persist] attribute, including inherited ones
@@ -53,20 +53,22 @@ public static class PersistorCodeGenerator
         }
         return fields.ToArray();
     }
-    private static List<Type> GetAllPersistorTypes(Type unitType)
-    {
-        var persistorTypes = new HashSet<Type>();
 
-        var classAttr = unitType.GetCustomAttribute<PersistorAttribute>(inherit: true);
-        if (classAttr != null && classAttr.PersistorTypes != null)
+    private static List<Type> GetAllAdaptorTypes(Type unitType)
+    {
+        var adaptorTypes = new HashSet<Type>();
+
+        var classAttr = unitType.GetCustomAttribute<AdaptorAttribute>(inherit: true);
+        if (classAttr != null && classAttr.AdaptorTypes != null)
         {
-            foreach (var t in classAttr.PersistorTypes)
-                persistorTypes.Add(t);
+            foreach (var t in classAttr.AdaptorTypes)
+                adaptorTypes.Add(t);
         }
 
-        return persistorTypes.ToList();
+        return adaptorTypes.ToList();
     }
-    private static FieldInfo[] GetAllPersistorIdFields(Type type)
+
+    private static FieldInfo[] GetAllAdaptorIdFields(Type type)
     {
         var fields = new List<FieldInfo>();
         while (type != null && type != typeof(object))
@@ -79,7 +81,8 @@ public static class PersistorCodeGenerator
         }
         return fields.ToArray();
     }
-    private static void GenerateForPersistors(Type unitType)
+
+    private static void GenerateForAdaptors(Type unitType)
     {
         var settings = PersistorSettings.GetOrCreateSettings();
         var fields = GetAllPersistFields(unitType);
@@ -91,25 +94,18 @@ public static class PersistorCodeGenerator
             if (!field.FieldType.IsClass || field.FieldType == typeof(string))
                 continue;
 
-            // Check for custom persistor
-            var (persistorType, _) = GetPersistorInfo(field);
+            // Check for custom adaptor
+            var (adaptorType, _) = GetAdaptorInfo(field);
 
-            // If not IPersistorId and not handled by a custom persistor, throw error
-            if (!typeof(IPersistorId).IsAssignableFrom(field.FieldType) && persistorType == null)
+            // If not IPersistorId and not handled by a custom adaptor, throw error
+            if (!typeof(IPersistorId).IsAssignableFrom(field.FieldType) && adaptorType == null)
             {
                 throw new InvalidOperationException(
-                    $"[Persist] field '{field.DeclaringType.FullName}.{field.Name}' is a reference type that does not implement IPersistorId and is not handled by a custom persistor. " +
-                    "Reference persistence requires IPersistorId or a custom persistor.");
+                    $"[Persist] field '{field.DeclaringType.FullName}.{field.Name}' is a reference type that does not implement IPersistorId and is not handled by a custom adaptor. " +
+                    "Reference persistence requires IPersistorId or a custom adaptor.");
             }
         }
         // --- End: Validation for [Persist] reference types ---
-
-        // Only generate for types that implement IPersistorId (directly or via base)
-        if (!typeof(IPersistorId).IsAssignableFrom(unitType))
-        {
-            Debug.LogError($"Type '{unitType.FullName}' must implement IPersistorId (inherit from PersistorMonoBehaviour or PersistorObject).");
-            return;
-        }
 
         // Only generate for types that implement IPersistorId (directly or via base)
         if (!typeof(IPersistorId).IsAssignableFrom(unitType))
@@ -146,13 +142,13 @@ public static class PersistorCodeGenerator
 
         var dataCode = GenerateDataClass(unitName, fields, settings.dataClassSuffix);
         File.WriteAllText(Path.Combine(folder, $"{unitName}{settings.dataClassSuffix}.cs"), dataCode);
-
     }
+
     private static string GeneratePresetSO(string unitName, FieldInfo[] fields, string presetSuffix)
     {
         var namespaces = CollectNamespaces(fields);
         namespaces.Add("UnityEngine"); // Always needed for ScriptableObject
-        namespaces.Add("PersistorEngine"); // Always needed for Persistor types
+        namespaces.Add("PersistorEngine"); // Always needed for Adaptor types
 
         var fieldsCode = string.Join("\n    ", fields.Select(f => GenerateFieldWithAttributes(f, true)));
         var copyFromPreset = string.Join("\n        ", fields.Select(f => $"unit.{f.Name} = this.{f.Name};"));
@@ -165,12 +161,12 @@ public static class PersistorCodeGenerator
         return
 $@"// ------------------------------------------------------------------------------
 // <auto-generated>
-//     This code was generated by PersistorCodeGenerator.
+//     This code was generated by AdaptorCodeGenerator.
 //     DO NOT EDIT. Any changes will be lost when the file is regenerated.
 // </auto-generated>
 // ------------------------------------------------------------------------------
 {usings}
-[CreateAssetMenu(menuName = ""Persistor Presets/{unitName}{menuSuffix}"")]
+[CreateAssetMenu(menuName = ""Adaptor Presets/{unitName}{menuSuffix}"")]
 public partial class {unitName}{presetSuffix} : ScriptableObject
 {{
     {fieldsCode}
@@ -182,11 +178,12 @@ public partial class {unitName}{presetSuffix} : ScriptableObject
 }}
 ";
     }
+
     private static string GenerateDataClass(string unitName, FieldInfo[] fields, string dataSuffix)
     {
         var namespaces = CollectNamespaces(fields);
-        namespaces.Add("PersistorEngine"); // Always needed for Persistor types
-        namespaces.Add("PersistorEngine.Internal"); // Always needed for Persistor types
+        namespaces.Add("PersistorEngine"); // Always needed for Adaptor types
+        namespaces.Add("PersistorEngine.Internal"); // Always needed for Adaptor types
 
         var usings = string.Join("\n", namespaces.Select(ns => $"using {ns};"));
 
@@ -194,10 +191,10 @@ public partial class {unitName}{presetSuffix} : ScriptableObject
         var fieldLines = new List<string> { "public string persistorId;" };
         foreach (var f in fields)
         {
-            var (persistorType, persistorFieldName) = GetPersistorInfo(f);
-            if (persistorType != null)
+            var (adaptorType, adaptorFieldName) = GetAdaptorInfo(f);
+            if (adaptorType != null)
             {
-                fieldLines.Add($"public {persistorType.Name} {persistorFieldName} = new();");
+                fieldLines.Add($"public {adaptorType.Name} {adaptorFieldName} = new();");
             }
             else if (typeof(IPersistorId).IsAssignableFrom(f.FieldType))
             {
@@ -210,13 +207,13 @@ public partial class {unitName}{presetSuffix} : ScriptableObject
             }
         }
 
-        // Add explicit persistors (class/field)
-        var persistorTypes = GetAllPersistorTypes(Type.GetType(unitName) ?? fields.First().DeclaringType);
-        var persistorFields = new List<string>(persistorTypes.Select(t => $"public {t.Name} {ToCamelCase(t.Name)} = new();"));
+        // Add explicit adaptors (class/field)
+        var adaptorTypes = GetAllAdaptorTypes(Type.GetType(unitName) ?? fields.First().DeclaringType);
+        var adaptorFields = new List<string>(adaptorTypes.Select(t => $"public {t.Name} {ToCamelCase(t.Name)} = new();"));
 
         var allFields = fieldLines;
-        if (persistorFields.Count > 0)
-            allFields.AddRange(persistorFields);
+        if (adaptorFields.Count > 0)
+            allFields.AddRange(adaptorFields);
 
         // Generate copy methods
         var copyToDataLines = new List<string>
@@ -225,13 +222,13 @@ public partial class {unitName}{presetSuffix} : ScriptableObject
         };
         foreach (var f in fields)
         {
-            var (persistorType, persistorField) = GetPersistorInfo(f);
-            if (persistorType != null)
+            var (adaptorType, adaptorField) = GetAdaptorInfo(f);
+            if (adaptorType != null)
             {
                 if (f.FieldType.IsValueType)
-                    copyToDataLines.Add($"{persistorField}.CopyToData(unit.{f.Name});");
+                    copyToDataLines.Add($"{adaptorField}.CopyToData(unit.{f.Name});");
                 else
-                    copyToDataLines.Add($"if (unit.{f.Name} != null) {persistorField}.CopyToData(unit.{f.Name});");
+                    copyToDataLines.Add($"if (unit.{f.Name} != null) {adaptorField}.CopyToData(unit.{f.Name});");
             }
             else if (typeof(IPersistorId).IsAssignableFrom(f.FieldType))
             {
@@ -249,13 +246,13 @@ public partial class {unitName}{presetSuffix} : ScriptableObject
         };
         foreach (var f in fields)
         {
-            var (persistorType, persistorField) = GetPersistorInfo(f);
-            if (persistorType != null)
+            var (adaptorType, adaptorField) = GetAdaptorInfo(f);
+            if (adaptorType != null)
             {
                 if (f.FieldType.IsValueType)
-                    copyFromDataLines.Add($"{persistorField}.CopyFromData(ref unit.{f.Name});");
+                    copyFromDataLines.Add($"{adaptorField}.CopyFromData(ref unit.{f.Name});");
                 else
-                    copyFromDataLines.Add($"if (unit.{f.Name} != null) {persistorField}.CopyFromData(unit.{f.Name});");
+                    copyFromDataLines.Add($"if (unit.{f.Name} != null) {adaptorField}.CopyFromData(unit.{f.Name});");
             }
             else if (typeof(IPersistorId).IsAssignableFrom(f.FieldType))
             {
@@ -267,14 +264,14 @@ public partial class {unitName}{presetSuffix} : ScriptableObject
             }
         }
 
-        // Add persistor logic if needed
-        var persistorCopyToData = string.Join("\n        ", persistorTypes.Select(t => $"{ToCamelCase(t.Name)}.CopyToData(unit);"));
-        var persistorCopyFromData = string.Join("\n        ", persistorTypes.Select(t => $"{ToCamelCase(t.Name)}.CopyFromData(unit);"));
+        // Add adaptor logic if needed
+        var adaptorCopyToData = string.Join("\n        ", adaptorTypes.Select(t => $"{ToCamelCase(t.Name)}.CopyToData(unit);"));
+        var adaptorCopyFromData = string.Join("\n        ", adaptorTypes.Select(t => $"{ToCamelCase(t.Name)}.CopyFromData(unit);"));
 
         return
 $@"// ------------------------------------------------------------------------------
 // <auto-generated>
-//     This code was generated by PersistorCodeGenerator.
+//     This code was generated by AdaptorCodeGenerator.
 //     DO NOT EDIT. Any changes will be lost when the file is regenerated.
 // </auto-generated>
 // ------------------------------------------------------------------------------
@@ -288,27 +285,29 @@ public partial class {unitName}{dataSuffix}
     public void CopyToData({unitName} unit)
     {{
         {string.Join("\n        ", copyToDataLines)}
-        {persistorCopyToData}
+        {adaptorCopyToData}
     }}
 
     public void CopyFromData({unitName} unit)
     {{
         {string.Join("\n        ", copyFromDataLines)}
-        {persistorCopyFromData}
+        {adaptorCopyFromData}
     }}
 }}";
     }
+
     private static string GenerateDataField(FieldInfo field)
     {
-        var (persistorType, persistorFieldName) = GetPersistorInfo(field);
-        if (persistorType != null)
-            return $"public {persistorType.Name} {persistorFieldName} = new();";
+        var (adaptorType, adaptorFieldName) = GetAdaptorInfo(field);
+        if (adaptorType != null)
+            return $"public {adaptorType.Name} {adaptorFieldName} = new();";
 
         if (typeof(IPersistorId).IsAssignableFrom(field.FieldType))
             return $"public string {field.Name}Id;";
         string typeName = GetCSharpTypeName(field.FieldType);
         return $"public {typeName} {field.Name};";
     }
+
     private static string GenerateFieldWithAttributes(FieldInfo field, bool forScriptableObject)
     {
         var attrs = field.GetCustomAttributes(false)
@@ -321,6 +320,7 @@ public partial class {unitName}{dataSuffix}
         string fieldLine = $"public {typeName} {field.Name};";
         return string.IsNullOrEmpty(attributes) ? fieldLine : $"{attributes}\n    {fieldLine}";
     }
+
     private static string AttributeToSource(object attr)
     {
         var type = attr.GetType();
@@ -342,6 +342,7 @@ public partial class {unitName}{dataSuffix}
             return $"[{type.Name.Replace("Attribute", "")}]";
         return null; // Skip unknown attributes for now
     }
+
     private static string GetCSharpTypeName(Type type)
     {
         if (type == typeof(int)) return "int";
@@ -358,6 +359,7 @@ public partial class {unitName}{dataSuffix}
             return GetCSharpTypeName(type.GetGenericArguments()[0]) + "?";
         return type.Name;
     }
+
     private static HashSet<string> CollectNamespaces(FieldInfo[] fields)
     {
         var namespaces = new HashSet<string>();
@@ -367,13 +369,15 @@ public partial class {unitName}{dataSuffix}
         }
         return namespaces;
     }
+
     private static string ToCamelCase(string name)
     {
         if (string.IsNullOrEmpty(name) || char.IsLower(name[0]))
             return name;
         return char.ToLowerInvariant(name[0]) + name.Substring(1);
     }
-    private static Dictionary<Type, Type> DiscoverGlobalPersistors()
+
+    private static Dictionary<Type, Type> DiscoverGlobalAdaptors()
     {
         var result = new Dictionary<Type, Type>();
         var assemblies = AppDomain.CurrentDomain.GetAssemblies();
@@ -384,8 +388,8 @@ public partial class {unitName}{dataSuffix}
                 var iface = type.GetInterfaces()
                     .FirstOrDefault(i =>
                         i.IsGenericType &&
-                        (i.GetGenericTypeDefinition() == typeof(IPersistorField<>) ||
-                         i.GetGenericTypeDefinition() == typeof(IPersistor<>)));
+                        (i.GetGenericTypeDefinition() == typeof(IAdaptorField<>) ||
+                         i.GetGenericTypeDefinition() == typeof(IAdaptor<>)));
                 if (iface != null)
                 {
                     var targetType = iface.GetGenericArguments()[0];
@@ -395,6 +399,7 @@ public partial class {unitName}{dataSuffix}
         }
         return result;
     }
+
     private static void CollectNamespacesFromType(Type type, HashSet<string> namespaces)
     {
         if (type == null || string.IsNullOrEmpty(type.Namespace) || type.Namespace == "System")
@@ -412,16 +417,17 @@ public partial class {unitName}{dataSuffix}
                 CollectNamespacesFromType(arg, namespaces);
         }
     }
-    private static (Type persistorType, string persistorFieldName) GetPersistorInfo(FieldInfo field)
-    {
-        // Check for global persistor
-        if (_globalPersistorMap != null && _globalPersistorMap.TryGetValue(field.FieldType, out var globalType))
-            return (globalType, $"{ToCamelCase(field.Name)}Persistor");
 
-        // Check for [Persistor] attribute on the field's type
-        var persistorAttr = field.FieldType.GetCustomAttribute<PersistorAttribute>();
-        if (persistorAttr != null && persistorAttr.PersistorTypes != null && persistorAttr.PersistorTypes.Length > 0)
-            return (persistorAttr.PersistorTypes[0], $"{ToCamelCase(field.Name)}Persistor");
+    private static (Type adaptorType, string adaptorFieldName) GetAdaptorInfo(FieldInfo field)
+    {
+        // Check for global adaptor
+        if (_globalAdaptorMap != null && _globalAdaptorMap.TryGetValue(field.FieldType, out var globalType))
+            return (globalType, $"{ToCamelCase(field.Name)}Adaptor");
+
+        // Check for [Adaptor] attribute on the field's type
+        var adaptorAttr = field.FieldType.GetCustomAttribute<AdaptorAttribute>();
+        if (adaptorAttr != null && adaptorAttr.AdaptorTypes != null && adaptorAttr.AdaptorTypes.Length > 0)
+            return (adaptorAttr.AdaptorTypes[0], $"{ToCamelCase(field.Name)}Adaptor");
 
         return (null, null);
     }
