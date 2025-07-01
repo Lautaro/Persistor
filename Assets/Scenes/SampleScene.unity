@@ -148,10 +148,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 113817adf2343ea46a97616ecbcadeb0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  preset: {fileID: 11400000, guid: 559da8b35fa81ce4c8177ab5b7c08dff, type: 2}
-  enemyPrefab: {fileID: 2416085915017145568, guid: 3b5c650df99fb5f4192646ac7b16b250, type: 3}
+  preset: {fileID: 0}
   createNewCount: 3
-  spawnedUnits: []
 --- !u!4 &1242758511
 Transform:
   m_ObjectHideFlags: 0

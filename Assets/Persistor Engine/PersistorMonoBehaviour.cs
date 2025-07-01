@@ -1,16 +1,24 @@
+using PersistorEngine.Internal;
 using UnityEngine;
-namespace PersistorEngine.Internal
+namespace PersistorEngine
 {
     public class PersistorMonoBehaviour : MonoBehaviour, IPersistorId
     {
-        public string persistorId { get; set; }
+        [SerializeField]
+        private string _persistorId;
 
-        protected virtual void Awake()
+        public string persistorId
+        {
+            get => _persistorId;
+            set => _persistorId = value;
+        }
+
+        public virtual void Awake()
         {
             PersistorRegistry.Register(this);
         }
 
-        protected virtual void OnDestroy()
+        public virtual void OnDestroy()
         {
             PersistorRegistry.Unregister(this);
         }

@@ -1,8 +1,8 @@
-using PersistorEngine.Internal;
+using PersistorEngine;
 using Sirenix.OdinInspector;
 using UnityEngine;
 
-[Adaptor(typeof(EnemyAdaptor)),PersistorPrefab("CoolSphere Enemy")]
+[Adaptor(typeof(TransformAdaptor)),PersistorPrefab("CoolSphere Enemy")]
 public class Enemy : PersistorMonoBehaviour
 {
     [Persist] public string unitName = "";

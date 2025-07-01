@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
 namespace PersistorEngine.Internal
 {
     public static class PersistorRegistry
@@ -52,12 +54,24 @@ namespace PersistorEngine.Internal
         }
         public static IEnumerable<IPersistorId> GetAll()
         {
+            Cleanup();
             return _dict.Values;
         }
 
         public static void Clear()
         {
             _dict.Clear();
+        }
+
+        public static void Cleanup()
+        {
+            var keysToRemove = _dict
+                .Where(kvp => kvp.Value == null || (kvp.Value is UnityEngine.Object unityObj && unityObj == null))
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            foreach (var key in keysToRemove)
+                _dict.Remove(key);
         }
     }
 }
