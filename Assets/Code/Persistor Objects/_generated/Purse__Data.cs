@@ -7,20 +7,19 @@
     using PersistorEngine;
 using PersistorEngine.Internal;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
-    [DataFor(typeof(PersistorGrowingSphere))]
+    [DataFor(typeof(Purse))]
     [System.Serializable]
-    public partial class PersistorGrowingSphere__Data
+    public partial class Purse__Data
     {
         public string persistorId;
     public string anchorId;
     public string parentId;
     public int siblingIndex;
     public string gameObjectName;
-    public List<string> ChildrenIds = new List<string>();
+    public List<string> items = new List<string>();
 
-        public void CopyToData(PersistorGrowingSphere unit)
+        public void CopyToData(Purse unit)
         {
             this.persistorId = unit.persistorId;
         // Hierarchy persistence
@@ -55,18 +54,18 @@ using UnityEngine;
     }
     this.siblingIndex = unit.transform.GetSiblingIndex();
     this.gameObjectName = unit.gameObject.name;
-        this.ChildrenIds = unit.Children != null ? unit.Children.Select(x => x != null ? x.persistorId : null).Where(id => id != null).ToList() : new List<string>();
+        this.items = unit.items != null ? new List<string>(unit.items) : new List<string>();
             
         }
 
-        public void CopyFromData(PersistorGrowingSphere unit, Transform parent, int siblingIndex)
+        public void CopyFromData(Purse unit, Transform parent, int siblingIndex)
         {
             unit.persistorId = this.persistorId;
         // Hierarchy restoration (parameters provided by Persistor.LoadAll)
     unit.transform.SetParent(parent, true);
     unit.transform.SetSiblingIndex(siblingIndex);
     unit.gameObject.name = this.gameObjectName;
-        unit.Children = this.ChildrenIds != null ? this.ChildrenIds.Select(id => PersistorRegistry.Resolve<PersistorGrowingSphere>(id)).Where(x => x != null).ToList() : new List<PersistorGrowingSphere>();
+        unit.items = this.items != null ? new List<string>(this.items) : new List<string>();
             
         }
     }

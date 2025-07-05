@@ -115,30 +115,64 @@ namespace PersistorEngine
             if (!File.Exists(path))
                 return;
 
-            // --- STEP 1: Destroy all existing persisted objects in the scene ---
-            // This ensures we don't get duplicates when loading from file.
-            // Only objects inheriting from PersistorMonoBehaviour are destroyed.
-            var existingPersisted = UnityEngine.Object.FindObjectsByType<PersistorMonoBehaviour>(FindObjectsSortMode.None);
-            foreach (var obj in existingPersisted)
-            {
-                // Destroy the entire GameObject to remove all components and children.
-                UnityEngine.Object.Destroy(obj.gameObject);
-            }
-
-            // --- STEP 2: Clear the registry ---
-            // This removes all references to previously registered objects.
-            PersistorRegistry.Clear();
-
-            // --- STEP 3: Read and parse the save file ---
+            // --- STEP 1: Read and parse the save file ---
             var json = File.ReadAllText(path);
             var saveRoot = JsonUtility.FromJson<PersistorSaveRoot>(json);
 
-            // Dictionaries to map between loaded data objects and runtime objects.
-            var dataToRuntime = new Dictionary<object, object>();
+            // --- STEP 2: Collect all persistorIds from the save file ---
+            var saveFileIds = new HashSet<string>();
+            foreach (var section in saveRoot.sections)
+            {
+                var runtimeType = GetRuntimeTypeByName(section.typeName);
+                if (runtimeType == null) continue;
+                var dataType = FindDataType(runtimeType);
+                if (dataType == null) continue;
+
+                foreach (var jsonObj in section.jsonObjects)
+                {
+                    var data = JsonUtility.FromJson(jsonObj, dataType);
+                    var id = GetPersistorId(data, dataType);
+                    if (!string.IsNullOrEmpty(id))
+                        saveFileIds.Add(id);
+                }
+            }
+
+            // --- STEP 3: Cache parent and sibling index for all StaticID anchors ---
+            var staticIdToAnchor = new Dictionary<string, PersistorMonoBehaviour>();
+            var staticIdToParentInfo = new Dictionary<string, (Transform parent, int siblingIndex)>();
+
+            foreach (var obj in PersistorRegistry.GetAll().OfType<PersistorMonoBehaviour>())
+            {
+                if (!string.IsNullOrEmpty(obj.persistorId))
+                {
+                    staticIdToAnchor[obj.persistorId] = obj;
+                    staticIdToParentInfo[obj.persistorId] = (
+                        obj.transform.parent,
+                        obj.transform.GetSiblingIndex()
+                    );
+                    Debug.Log($"[Persistor] Cached anchor: {obj.persistorId} parent={obj.transform.parent?.name} siblingIndex={obj.transform.GetSiblingIndex()}");
+                }
+            }
+
+            // --- STEP 4: Destroy scene anchors not present in the save file ---
+            foreach (var kvp in staticIdToAnchor)
+            {
+                if (!saveFileIds.Contains(kvp.Key))
+                {
+#if UNITY_EDITOR
+                    UnityEngine.Object.DestroyImmediate(kvp.Value.gameObject);
+#else
+                    UnityEngine.Object.Destroy(kvp.Value.gameObject);
+#endif
+                }
+            }
+            PersistorRegistry.Clear();
+
+            // --- STEP 5: Instantiate all objects from save file ---
             var dataObjectsByType = new Dictionary<Type, List<object>>();
             var runtimeObjectsByType = new Dictionary<Type, List<object>>();
+            var dataToRuntime = new Dictionary<object, object>();
 
-            // --- STEP 4: First pass - Instantiate and register all objects, but do NOT set up hierarchy yet ---
             foreach (var section in saveRoot.sections)
             {
                 var runtimeType = GetRuntimeTypeByName(section.typeName);
@@ -154,15 +188,25 @@ namespace PersistorEngine
 
                 foreach (var jsonObj in section.jsonObjects)
                 {
-                    // Deserialize the data object (fields from save file)
                     var data = JsonUtility.FromJson(jsonObj, dataType);
                     dataList.Add(data);
+
+                    var id = GetPersistorId(data, dataType);
+
+                    // Destroy anchor if present (should already be destroyed above, but double-check)
+                    if (staticIdToAnchor.TryGetValue(id, out var anchorObj))
+                    {
+#if UNITY_EDITOR
+                        UnityEngine.Object.DestroyImmediate(anchorObj.gameObject);
+#else
+                        UnityEngine.Object.Destroy(anchorObj.gameObject);
+#endif
+                    }
 
                     // Create the runtime object (MonoBehaviour or POCO)
                     object runtimeObj = CreateInstanceForType(runtimeType);
 
-                    // Set the persistorId on the runtime object (so it can be found by registry)
-                    var id = GetPersistorId(data, dataType);
+                    // Set the persistorId on the runtime object
                     SetPersistorId(runtimeObj, runtimeType, id);
 
                     // Register the object in the global registry
@@ -179,7 +223,10 @@ namespace PersistorEngine
                 runtimeObjectsByType[runtimeType] = runtimeList;
             }
 
-            // --- STEP 5: Second pass - Restore hierarchy and sibling order for all PersistorMonoBehaviour objects ---
+            // --- STEP 6 & 7: Determine parent and sibling index for each object ---
+            // We'll store the result for each object to use in STEP 8
+            var parentingInfoByObject = new Dictionary<object, (Transform parent, int siblingIndex)>();
+
             foreach (var kvp in dataObjectsByType)
             {
                 var dataType = FindDataType(kvp.Key);
@@ -187,13 +234,6 @@ namespace PersistorEngine
                 var dataList = kvp.Value;
                 var runtimeList = runtimeObjectsByType[runtimeType];
 
-                // Use reflection to check if this type is a PersistorMonoBehaviour
-                bool isPersistorMonoBehaviour = typeof(PersistorMonoBehaviour).IsAssignableFrom(runtimeType);
-
-                if (!isPersistorMonoBehaviour)
-                    continue; // Only do hierarchy for PersistorMonoBehaviour
-
-                // Get the anchorId, parentId, and siblingIndex fields from the data class using reflection
                 var anchorIdField = dataType.GetField("anchorId");
                 var parentIdField = dataType.GetField("parentId");
                 var siblingIndexField = dataType.GetField("siblingIndex");
@@ -202,67 +242,85 @@ namespace PersistorEngine
                 {
                     var data = dataList[i];
                     var runtimeObj = runtimeList[i] as PersistorMonoBehaviour;
-                    if (runtimeObj == null)
-                        continue;
+                    Transform parent = null;
+                    int siblingIndex = 0;
 
-                    // --- Find the correct parent transform ---
-                    Transform newParent = null;
-
-                    // 1. Try to parent to a PersistorAnchor if anchorId is set
-                    string anchorId = anchorIdField?.GetValue(data) as string;
-                    if (!string.IsNullOrEmpty(anchorId))
+                    if (runtimeObj != null)
                     {
-                        // Find all anchors in the scene and match by AnchorID
-                        var anchors = UnityEngine.Object.FindObjectsByType<PersistorAnchor>(FindObjectsSortMode.None);
-                        foreach (var anchor in anchors)
+                        var id = GetPersistorId(data, dataType);
+                        (Transform parent, int siblingIndex) parentInfo;
+                        if (staticIdToParentInfo.TryGetValue(id, out parentInfo) && parentInfo.parent != null)
                         {
-                            if (anchor.AnchorID == anchorId)
+                            parent = parentInfo.Item1;
+                            siblingIndex = parentInfo.Item2;
+                            Debug.Log($"[Persistor] (Planned) Parenting {runtimeObj.name} ({id}) to anchor parent {parentInfo.Item1.name} at sibling {parentInfo.Item2}");
+                        }
+                        else
+                        {
+                            string anchorId = anchorIdField?.GetValue(data) as string;
+                            if (!string.IsNullOrEmpty(anchorId))
                             {
-                                newParent = anchor.transform;
-                                break;
+                                var anchors = PersistorRegistry.GetAll().OfType<PersistorAnchor>();
+                                foreach (var anchor in anchors)
+                                {
+                                    if (anchor.AnchorID == anchorId)
+                                    {
+                                        parent = anchor.transform;
+                                        break;
+                                    }
+                                }
                             }
-                        }
-                    }
-                    else
-                    {
-                        // 2. Try to parent to another PersistorMonoBehaviour if parentId is set
-                        string parentId = parentIdField?.GetValue(data) as string;
-                        if (!string.IsNullOrEmpty(parentId))
-                        {
-                            // Use the registry to resolve the parent by persistorId
-                            var parentObj = PersistorRegistry.Resolve<PersistorMonoBehaviour>(parentId);
-                            if (parentObj != null)
-                                newParent = parentObj.transform;
+                            else
+                            {
+                                string parentId = parentIdField?.GetValue(data) as string;
+                                if (!string.IsNullOrEmpty(parentId))
+                                {
+                                    var parentObj = PersistorRegistry.Resolve<PersistorMonoBehaviour>(parentId);
+                                    if (parentObj != null)
+                                        parent = parentObj.transform;
+                                }
+                            }
+                            siblingIndex = siblingIndexField != null ? (int)siblingIndexField.GetValue(data) : 0;
+                            Debug.Log($"[Persistor] (Planned) Parenting {runtimeObj?.name ?? "(null)"} ({id}) to {(parent != null ? parent.name : "root")} at sibling {siblingIndex}");
                         }
                     }
 
-                    // 3. If neither, parent will be null (scene root)
-                    runtimeObj.transform.SetParent(newParent, true);
-
-                    // --- Set sibling index ---
-                    int siblingIndex = siblingIndexField != null ? (int)siblingIndexField.GetValue(data) : 0;
-                    // Clamp to valid range
-                    int maxSiblings = runtimeObj.transform.parent != null
-                        ? runtimeObj.transform.parent.childCount
-                        : UnityEngine.SceneManagement.SceneManager.GetActiveScene().rootCount;
-                    siblingIndex = Mathf.Clamp(siblingIndex, 0, maxSiblings - 1);
-                    runtimeObj.transform.SetSiblingIndex(siblingIndex);
+                    parentingInfoByObject[runtimeObj] = (parent, siblingIndex);
                 }
             }
 
-            // --- STEP 6: Third pass - Copy all other data and run adaptors ---
+            // --- STEP 8: Copy all other data and run adaptors, passing parent/siblingIndex ---
             foreach (var kvp in dataObjectsByType)
             {
                 var dataType = FindDataType(kvp.Key);
                 var copyFromData = dataType.GetMethod("CopyFromData", BindingFlags.Public | BindingFlags.Instance);
                 var dataList = kvp.Value;
                 var runtimeList = runtimeObjectsByType[kvp.Key];
+
                 for (int i = 0; i < dataList.Count; i++)
                 {
-                    // This will copy all fields and run adaptors, now that hierarchy is correct
-                    copyFromData.Invoke(dataList[i], new object[] { runtimeList[i] });
+                    var runtimeObj = runtimeList[i] as PersistorMonoBehaviour;
+                    if (runtimeObj != null && parentingInfoByObject.TryGetValue(runtimeObj, out var info))
+                    {
+                        copyFromData.Invoke(dataList[i], new object[] { runtimeObj, info.parent, info.siblingIndex });
+                    }
+                    else
+                    {
+                        // For non-PersistorMonoBehaviour types, fallback to old signature
+                        copyFromData.Invoke(dataList[i], new object[] { runtimeList[i] });
+                    }
                 }
             }
+
+            // --- Print hierarchy for debug ---
+            void PrintHierarchy(Transform t, string indent = "")
+            {
+                Debug.Log($"{indent}{t.name}");
+                foreach (Transform child in t)
+                    PrintHierarchy(child, indent + "  ");
+            }
+            foreach (var root in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())
+                PrintHierarchy(root.transform);
         }
 
         /// <summary>

@@ -73,5 +73,24 @@ namespace PersistorEngine.Internal
             foreach (var key in keysToRemove)
                 _dict.Remove(key);
         }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        public static void RegisterAllPersistorObjectsToCatchDisabledOnes()
+        {
+            // THIS IS NEEDED AT STARTUP BECAUSE DISABLED MONOBEHAVIOURS WONT AUTO REGISTER UNTIL ENABLED
+            // Register all PersistorMonoBehaviour objects, including disabled ones
+            var allPMBs = UnityEngine.Object.FindObjectsByType<PersistorMonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (var pmb in allPMBs)
+            {
+                PersistorRegistry.Register(pmb);
+            }
+
+            //// If you have a PersistorAnchor type, register those as well
+            //var allAnchors = UnityEngine.Object.FindObjectsByType<PersistorAnchor>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            //foreach (var anchor in allAnchors)
+            //{
+            //    PersistorRegistry.Register(anchor);
+            //}
+        }
     }
 }

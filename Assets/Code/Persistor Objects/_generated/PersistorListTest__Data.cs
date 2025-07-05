@@ -58,39 +58,13 @@ using UnityEngine;
             
         }
 
-        public void CopyFromData(PersistorListTest unit)
+        public void CopyFromData(PersistorListTest unit, Transform parent, int siblingIndex)
         {
             unit.persistorId = this.persistorId;
-        // Hierarchy restoration
-    Transform newParent = null;
-    if (!string.IsNullOrEmpty(this.anchorId))
-    {
-        var anchors = UnityEngine.Object.FindObjectsByType<PersistorAnchor>(FindObjectsSortMode.None);
-        foreach (var anchor in anchors)
-        {
-            if (anchor.AnchorID == this.anchorId)
-            {
-                newParent = anchor.transform;
-                break;
-            }
-        }
-    }
-    else if (!string.IsNullOrEmpty(this.parentId))
-    {
-        var allPMBs = UnityEngine.Object.FindObjectsByType<PersistorMonoBehaviour>(FindObjectsSortMode.None);
-        foreach (var pmb in allPMBs)
-        {
-            if (pmb.persistorId == this.parentId)
-            {
-                newParent = pmb.transform;
-                break;
-            }
-        }
-    }
-    unit.transform.SetParent(newParent, true);
-    unit.transform.SetSiblingIndex(this.siblingIndex);
+        // Hierarchy restoration (parameters provided by Persistor.LoadAll)
+    unit.transform.SetParent(parent, true);
+    unit.transform.SetSiblingIndex(siblingIndex);
     unit.gameObject.name = this.gameObjectName;
-        unit.Values = this.Values != null ? new List<int>(this.Values) : new List<int>();
         unit.Values = this.Values != null ? new List<int>(this.Values) : new List<int>();
             
         }

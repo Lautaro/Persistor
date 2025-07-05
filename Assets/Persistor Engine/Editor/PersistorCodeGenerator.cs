@@ -294,54 +294,14 @@ public partial class {unitName}{presetSuffix} : ScriptableObject
             );
         }
 
-        var copyFromDataLines = new List<string>
-        {
-            "unit.persistorId = this.persistorId;"
-        };
-
-        // Restore hierarchy info in CopyFromData
-        if (isPersistorMonoBehaviour)
-        {
-            copyFromDataLines.Add(
-    @"// Hierarchy restoration
-    Transform newParent = null;
-    if (!string.IsNullOrEmpty(this.anchorId))
-    {
-        var anchors = UnityEngine.Object.FindObjectsByType<PersistorAnchor>(FindObjectsSortMode.None);
-        foreach (var anchor in anchors)
-        {
-            if (anchor.AnchorID == this.anchorId)
-            {
-                newParent = anchor.transform;
-                break;
-            }
-        }
-    }
-    else if (!string.IsNullOrEmpty(this.parentId))
-    {
-        var allPMBs = UnityEngine.Object.FindObjectsByType<PersistorMonoBehaviour>(FindObjectsSortMode.None);
-        foreach (var pmb in allPMBs)
-        {
-            if (pmb.persistorId == this.parentId)
-            {
-                newParent = pmb.transform;
-                break;
-            }
-        }
-    }
-    unit.transform.SetParent(newParent, true);
-    unit.transform.SetSiblingIndex(this.siblingIndex);
-    unit.gameObject.name = this.gameObjectName;"
-            );
-        }
-
+        // --- Add code to copy all [Persist] fields/properties ---
         foreach (var m in members)
         {
             var (adaptorType, adaptorField) = GetAdaptorInfo(m);
             if (adaptorType != null)
             {
                 if (m.MemberType.IsValueType)
-                    copyToDataLines.Add($"{adaptorField}.CopyToData(unit.{m.Name});");
+                    copyToDataLines.Add($"{adaptorField}.CopyToData(ref unit.{m.Name});");
                 else
                     copyToDataLines.Add($"if (unit.{m.Name} != null) {adaptorField}.CopyToData(unit.{m.Name});");
             }
@@ -350,16 +310,15 @@ public partial class {unitName}{presetSuffix} : ScriptableObject
                 var elementType = GetCollectionElementType(m.MemberType);
                 if (typeof(IPersistorId).IsAssignableFrom(elementType))
                 {
-                    copyToDataLines.Add($"this.{m.Name}Ids = unit.{m.Name} != null ? unit.{m.Name}.Select(x => x?.persistorId).ToList() : new List<string>();");
-                    copyFromDataLines.Add(
-                        $"unit.{m.Name} = this.{m.Name}Ids != null ? this.{m.Name}Ids.Select(id => PersistorRegistry.Resolve<{GetCSharpTypeName(elementType)}>(id)).Where(x => x != null).ToList() : new List<{GetCSharpTypeName(elementType)}>();"
+                    copyToDataLines.Add(
+                        $"this.{m.Name}Ids = unit.{m.Name} != null ? unit.{m.Name}.Select(x => x != null ? x.persistorId : null).Where(id => id != null).ToList() : new List<string>();"
                     );
                 }
                 else
                 {
-                    string elemTypeName = GetCSharpTypeName(elementType);
-                    copyToDataLines.Add($"this.{m.Name} = unit.{m.Name} != null ? new List<{elemTypeName}>(unit.{m.Name}) : new List<{elemTypeName}>();");
-                    copyFromDataLines.Add($"unit.{m.Name} = this.{m.Name} != null ? new List<{elemTypeName}>(this.{m.Name}) : new List<{elemTypeName}>();");
+                    copyToDataLines.Add(
+                        $"this.{m.Name} = unit.{m.Name} != null ? new List<{GetCSharpTypeName(elementType)}>(unit.{m.Name}) : new List<{GetCSharpTypeName(elementType)}>();"
+                    );
                 }
             }
             else if (typeof(IPersistorId).IsAssignableFrom(m.MemberType))
@@ -370,6 +329,26 @@ public partial class {unitName}{presetSuffix} : ScriptableObject
             {
                 copyToDataLines.Add($"this.{m.Name} = unit.{m.Name};");
             }
+        }
+
+        // --- CopyFromData logic (unchanged) ---
+        var copyFromDataSignature = isPersistorMonoBehaviour
+            ? $"public void CopyFromData({unitName} unit, Transform parent, int siblingIndex)"
+            : $"public void CopyFromData({unitName} unit)";
+
+        var copyFromDataLines = new List<string>
+        {
+            "unit.persistorId = this.persistorId;"
+        };
+
+        if (isPersistorMonoBehaviour)
+        {
+            copyFromDataLines.Add(
+    @"// Hierarchy restoration (parameters provided by Persistor.LoadAll)
+    unit.transform.SetParent(parent, true);
+    unit.transform.SetSiblingIndex(siblingIndex);
+    unit.gameObject.name = this.gameObjectName;"
+            );
         }
 
         foreach (var m in members)
@@ -441,7 +420,7 @@ public partial class {unitName}{presetSuffix} : ScriptableObject
             {adaptorCopyToData}
         }}
 
-        public void CopyFromData({unitName} unit)
+        {copyFromDataSignature}
         {{
             {string.Join("\n        ", copyFromDataLines)}
             {adaptorCopyFromData}
